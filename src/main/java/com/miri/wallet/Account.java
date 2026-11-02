@@ -5,18 +5,24 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.math.BigDecimal;
+import java.security.SecureRandom;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "accounts")
 public class Account {
+    private static final SecureRandom RANDOM = new SecureRandom();
+
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     private Long userId;
+    @Column(updatable = false, length = 10)
+    private String accountNumber;
     @JdbcTypeCode(SqlTypes.CHAR)
     @Column(length = 3)
     private String currency;
@@ -33,6 +39,17 @@ public class Account {
         this.currency = currency;
         this.balance = balance;
         this.version = version;
+    }
+
+    @PrePersist
+    void assignAccountNumber() {
+        if (accountNumber == null) {
+            accountNumber = String.valueOf(1_000_000_000L + RANDOM.nextLong(9_000_000_000L));
+        }
+    }
+
+    public String getAccountNumber() {
+        return accountNumber;
     }
 
     public Long getId() {

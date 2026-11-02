@@ -1,6 +1,6 @@
 package com.miri.wallet.security;
 
-import com.miri.wallet.User;
+import com.miri.wallet.RegistrationService;
 import com.miri.wallet.UserRepository;
 import jakarta.validation.Valid;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -18,11 +18,14 @@ public class AuthController {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final RegistrationService registrationService;
 
-    public AuthController(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService) {
+    public AuthController(UserRepository userRepository, PasswordEncoder passwordEncoder,
+                          JwtService jwtService, RegistrationService registrationService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.registrationService = registrationService;
     }
 
     @PostMapping("/register")
@@ -32,7 +35,7 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
         try {
-            var user = userRepository.save(new User(null, email, passwordEncoder.encode(request.password())));
+            var user = registrationService.register(email, passwordEncoder.encode(request.password()));
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(new AuthResponse(jwtService.generateToken(user.getId(), user.getEmail())));
         } catch (DataIntegrityViolationException e) {
