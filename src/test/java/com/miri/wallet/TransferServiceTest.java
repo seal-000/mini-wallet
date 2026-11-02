@@ -39,6 +39,8 @@ class TransferServiceTest {
         when(transferRepository.findByIdempotencyKey("transfer-1")).thenReturn(Optional.empty());
         when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(source));
         when(accountRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(destination));
+        when(ledgerEntryRepository.balanceOf(1L)).thenReturn(source.getBalance());
+        when(ledgerEntryRepository.balanceOf(2L)).thenReturn(destination.getBalance());
         when(transferRepository.save(any(Transfer.class))).thenAnswer(invocation -> {
             var transfer = invocation.<Transfer>getArgument(0);
             transfer.setId(42L);
@@ -60,6 +62,8 @@ class TransferServiceTest {
         var source = new Account(1L, 7L, "USD", new BigDecimal("4.0000"), 0L);
         var destination = new Account(2L, 7L, "USD", BigDecimal.ZERO, 0L);
         when(transferRepository.findByIdempotencyKey("transfer-2")).thenReturn(Optional.empty());
+        when(ledgerEntryRepository.balanceOf(1L)).thenReturn(source.getBalance());
+        when(ledgerEntryRepository.balanceOf(2L)).thenReturn(destination.getBalance());
         when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(source));
         when(accountRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(destination));
 

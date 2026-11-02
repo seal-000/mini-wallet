@@ -58,12 +58,15 @@ public class TransferService {
         if (!Objects.equals(source.getCurrency(), destination.getCurrency())) {
             throw new IllegalArgumentException("Accounts must use the same currency");
         }
-        if (source.getBalance().compareTo(amount) < 0) {
+        // The ledger is the source of truth; accounts.balance is a cached projection of it.
+        var sourceBalance = ledgerEntryRepository.balanceOf(fromId);
+        var destinationBalance = ledgerEntryRepository.balanceOf(toId);
+        if (sourceBalance.compareTo(amount) < 0) {
             throw new InsufficientFundsException("Insufficient funds in source account");
         }
 
-        source.setBalance(source.getBalance().subtract(amount));
-        destination.setBalance(destination.getBalance().add(amount));
+        source.setBalance(sourceBalance.subtract(amount));
+        destination.setBalance(destinationBalance.add(amount));
         accountRepository.saveAll(List.of(source, destination));
 
         var now = LocalDateTime.now();

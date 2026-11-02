@@ -1,6 +1,7 @@
 package com.miri.wallet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
@@ -31,15 +32,25 @@ class TransferServiceConcurrencyTest {
     @Autowired
     private TransferService transferService;
 
+    @Autowired
+    private LedgerEntryRepository ledgerEntryRepository;
+
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
     @Test
     void concurrentTransfersPreserveTotalBalanceAndNeverOverdraw() throws Exception {
-        var user = userRepository.saveAndFlush(
-                new User(null, "concurrency-" + UUID.randomUUID() + "@wallet.test", "unused"));
+        var sourceUser = userRepository.saveAndFlush(
+                new User(null, "concurrency-a-" + UUID.randomUUID() + "@wallet.test", "unused"));
+        var destinationUser = userRepository.saveAndFlush(
+                new User(null, "concurrency-b-" + UUID.randomUUID() + "@wallet.test", "unused"));
         var source = accountRepository.saveAndFlush(
-                new Account(null, user.getId(), "USD", new BigDecimal("100.0000"), 0L));
+                new Account(null, sourceUser.getId(), "USD", new BigDecimal("100.0000"), 0L));
         var destination = accountRepository.saveAndFlush(
-                new Account(null, user.getId(), "USD", new BigDecimal("0.0000"), 0L));
+                new Account(null, destinationUser.getId(), "USD", new BigDecimal("0.0000"), 0L));
         var initialTotal = source.getBalance().add(destination.getBalance());
+        ledgerEntryRepository.save(new LedgerEntry(null, null, source.getId(), "CREDIT",
+                source.getBalance(), java.time.LocalDateTime.now()));
 
         ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
         var ready = new CountDownLatch(THREAD_COUNT);
@@ -85,6 +96,14 @@ class TransferServiceConcurrencyTest {
         assertTrue(finalDestination.getBalance().signum() >= 0, "Destination balance must not be negative");
         assertEquals(new BigDecimal("50.0000"), finalSource.getBalance());
         assertEquals(new BigDecimal("50.0000"), finalDestination.getBalance());
+        assertEquals(0, ledgerEntryRepository.balanceOf(source.getId()).compareTo(finalSource.getBalance()));
+        assertEquals(0, ledgerEntryRepository.balanceOf(destination.getId())
+                .compareTo(finalDestination.getBalance()));
+        var entry = ledgerEntryRepository.findAll().get(0);
+        assertThrows(Exception.class, () -> jdbcTemplate.update(
+                "UPDATE ledger_entries SET amount = 1 WHERE id = ?", entry.getId()));
+        assertThrows(Exception.class, () -> jdbcTemplate.update(
+                "DELETE FROM ledger_entries WHERE id = ?", entry.getId()));
     }
 
 }
