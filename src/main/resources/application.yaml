@@ -11,8 +11,8 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-    flyway:
-      enabled: true
+  flyway:
+    enabled: true
 app:
   jwt-secret: ${JWT_SECRET:dev-only-secret-change-me-at-least-32-bytes-long}
   jwt-expiration-ms: 3600000
