@@ -2,7 +2,12 @@ package com.miri.wallet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import com.miri.wallet.fx.FxRateProvider;
+import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -13,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -23,6 +29,9 @@ class WalletApiTest {
 
     @Value("${local.server.port}")
     private int port;
+
+    @MockitoBean
+    private FxRateProvider rateProvider;
 
     @Test
     void usersSeeOnlyTheirOwnAccountsAndCannotSpendFromOthers() throws Exception {
@@ -73,6 +82,57 @@ class WalletApiTest {
         assertEquals(401, send("GET", "/api/statements", null, null, null).statusCode());
     }
 
+    @Test
+    void crossCurrencyTransferPostsFourLegsStoresRateAndCachesIt() throws Exception {
+        when(rateProvider.fetchRate("USD", "EUR")).thenReturn(new BigDecimal("0.85"));
+        var aliceEmail = "alice-" + UUID.randomUUID() + "@wallet.test";
+        var bobEmail = "bob-" + UUID.randomUUID() + "@wallet.test";
+        var aliceToken = register(aliceEmail);
+        var bobToken = register(bobEmail);
+        var aliceUsd = wallet(aliceToken, "USD");
+        var bobEur = wallet(bobToken, "EUR");
+
+        var quote = send("GET", "/api/fx/quote?from=USD&to=EUR&amount=10", aliceToken, null, null);
+        assertEquals(200, quote.statusCode());
+        assertTrue(quote.body().contains("\"rate\":0.85") && quote.body().contains("\"convertedAmount\":8.5")
+                && quote.body().contains("\"fee\":0.05"), quote.body());
+
+        var response = send("POST", "/api/transfers", aliceToken,
+                "{\"fromAccountId\":" + aliceUsd.id() + ",\"toEmail\":\"" + bobEmail
+                        + "\",\"amount\":10,\"toCurrency\":\"EUR\"}", UUID.randomUUID().toString());
+        assertEquals(200, response.statusCode(), response.body());
+        assertTrue(response.body().contains("\"toAmount\":8.5") && response.body().contains("\"exchangeRate\":0.85")
+                && response.body().contains("\"toCurrency\":\"EUR\"") && response.body().contains("\"fee\":0.05"),
+                response.body());
+
+        var aliceDebits = send("GET", "/api/statements?type=debit&accountId=" + aliceUsd.id(), aliceToken, null,
+                null).body();
+        assertTrue(aliceDebits.contains("Transfer fee") && aliceDebits.contains("\"amount\":-0.05"), aliceDebits);
+
+        // Quote and transfer share one cached rate: the provider was called once.
+        verify(rateProvider, times(1)).fetchRate("USD", "EUR");
+
+        var reconcile = send("GET", "/api/ledger/reconcile", aliceToken, null, null).body();
+        assertTrue(!reconcile.contains("\"balanced\":false"), reconcile);
+        var bobCredits = send("GET", "/api/statements?type=credit&accountId=" + bobEur.id(), bobToken, null, null)
+                .body();
+        assertTrue(bobCredits.contains("\"amount\":8.5") && bobCredits.contains("Transfer from account ending"),
+                bobCredits);
+        var bobReconcile = send("GET", "/api/ledger/reconcile", bobToken, null, null).body();
+        assertTrue(!bobReconcile.contains("\"balanced\":false"), bobReconcile);
+
+        // The clearing wallets cannot be used as a recipient.
+        assertEquals(404, send("POST", "/api/transfers", aliceToken,
+                "{\"fromAccountId\":" + aliceUsd.id() + ",\"toEmail\":\"" + TransferService.FX_CLEARING_EMAIL
+                        + "\",\"amount\":1}", UUID.randomUUID().toString()).statusCode());
+        assertEquals(404, send("POST", "/api/transfers", aliceToken,
+                "{\"fromAccountId\":" + aliceUsd.id() + ",\"toEmail\":\"" + TransferService.FEE_REVENUE_EMAIL
+                        + "\",\"amount\":1}", UUID.randomUUID().toString()).statusCode());
+        // No rate available for an unmocked pair -> 503.
+        assertEquals(503, send("GET", "/api/fx/quote?from=USD&to=JPY&amount=1", aliceToken, null, null)
+                .statusCode());
+    }
+
     private String register(String email) throws Exception {
         var response = send("POST", "/api/auth/register", null,
                 "{\"email\":\"" + email + "\",\"password\":\"password123\"}", null);
@@ -86,9 +146,14 @@ class WalletApiTest {
     }
 
     private Created usdWallet(String token) throws Exception {
+        return wallet(token, "USD");
+    }
+
+    private Created wallet(String token, String currency) throws Exception {
         var body = send("GET", "/api/accounts", token, null, null).body();
         var matcher = Pattern.compile(
-                "\\{\"id\":(\\d+),\"currency\":\"USD\",\"balance\":[^,]+,\"accountNumber\":\"(\\d{10})\"\\}")
+                "\\{\"id\":(\\d+),\"currency\":\"" + currency
+                        + "\",\"balance\":[^,]+,\"accountNumber\":\"(\\d{10})\"\\}")
                 .matcher(body);
         assertTrue(matcher.find(), body);
         return new Created(Long.parseLong(matcher.group(1)), matcher.group(2));
