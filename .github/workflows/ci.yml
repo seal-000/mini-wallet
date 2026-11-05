@@ -39,4 +39,4 @@ jobs:
     needs: backend
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t wallet .
+      - run: docker build -t mini-wallet .
