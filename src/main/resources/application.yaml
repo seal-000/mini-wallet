@@ -13,7 +13,12 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+  cache:
+  cache-names: fxRates
+  caffeine:
+    spec: expireAfterWrite=1h,maximumSize=100
 app:
+  fx-api-url: ${FX_API_URL:https://api.frankfurter.dev/v1}
   jwt-secret: ${JWT_SECRET:dev-only-secret-change-me-at-least-32-bytes-long}
   jwt-expiration-ms: 3600000
   cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
