@@ -90,7 +90,10 @@ public class StatementService {
                 description = "Opening balance";
             } else {
                 var otherId = debit ? transfer.getToAccountId() : transfer.getFromAccountId();
-                description = (debit ? "Transfer to" : "Transfer from") + " account ending "
+                var isFee = debit && transfer.getFee() != null && transfer.getFee().signum() > 0
+                        && e.getAmount().compareTo(transfer.getFee()) == 0;
+                description = isFee ? "Transfer fee"
+                        : (debit ? "Transfer to" : "Transfer from") + " account ending "
                         + ending(accounts.get(otherId));
             }
             return new StatementLine(e.getId(), e.getCreatedAt(), e.getAccountId(), account.getCurrency(),

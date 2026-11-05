@@ -22,6 +22,11 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.FORBIDDEN, exception.getMessage());
     }
 
+    @ExceptionHandler(FxUnavailableException.class)
+    public ResponseEntity<ApiError> handleFxUnavailable(FxUnavailableException exception) {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
+    }
+
     @ExceptionHandler(AccountNotFoundException.class)
     public ResponseEntity<ApiError> handleAccountNotFound(AccountNotFoundException exception) {
         return error(HttpStatus.NOT_FOUND, exception.getMessage());

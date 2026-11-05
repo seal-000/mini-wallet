@@ -17,4 +17,7 @@ public interface AccountRepository extends JpaRepository<Account, Long>  {
 
     Optional<Account> findFirstByUserIdAndCurrencyOrderById(Long userId, String currency);
 
+    @Query("select a from Account a, User u where u.id = a.userId and u.email = :email and a.currency = :currency")
+    Optional<Account> findByUserEmailAndCurrency(@Param("email") String email, @Param("currency") String currency);
+
 }

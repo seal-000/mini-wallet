@@ -11,11 +11,13 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.miri.wallet.common.InsufficientFundsException;
+import com.miri.wallet.fx.FxRateService;
 import java.math.BigDecimal;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.context.ApplicationEventPublisher;
 
 class TransferServiceTest {
     private AccountRepository accountRepository;
@@ -29,8 +31,9 @@ class TransferServiceTest {
         transferRepository = Mockito.mock(TransferRepository.class);
         ledgerEntryRepository = Mockito.mock(LedgerEntryRepository.class);
         transferService = new TransferService(
-                accountRepository, transferRepository, ledgerEntryRepository);
-    }
+                accountRepository, transferRepository, ledgerEntryRepository,                 Mockito.mock(FxRateService.class),
+                                Mockito.mock(ApplicationEventPublisher.class));
+                    }
 
     @Test
     void transferMovesFundsAndRecordsLedgerEntries() {
