@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { createTransfer } from '../api'
+import { useEffect, useState } from 'react'
+import { createTransfer, getQuote } from '../api'
 import { formatMoney } from '../format'
 
 const DEMO_RECIPIENT = 'friend@wallet.com'
@@ -7,7 +7,9 @@ const DEMO_RECIPIENT = 'friend@wallet.com'
 export default function TransferForm({ accounts, onTransferred }) {
   const [fromId, setFromId] = useState('')
   const [toEmail, setToEmail] = useState('')
+  const [toCurrencyChoice, setToCurrencyChoice] = useState('')
   const [amount, setAmount] = useState('')
+  const [quoteState, setQuoteState] = useState(null)
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -15,12 +17,36 @@ export default function TransferForm({ accounts, onTransferred }) {
 
   const selectedFrom = fromId || accounts[0]?.id || ''
   const selectedAccount = accounts.find((account) => String(account.id) === String(selectedFrom))
+  const sourceCurrency = selectedAccount?.currency ?? 'USD'
+  const targetCurrency = toCurrencyChoice || sourceCurrency
+  const crossCurrency = targetCurrency !== sourceCurrency
   const numericAmount = Number(amount)
   const validAmount = Number.isFinite(numericAmount) && numericAmount > 0
-  const formattedAmount = formatMoney(validAmount ? numericAmount : 0, selectedAccount?.currency ?? 'USD')
+  const formattedAmount = formatMoney(validAmount ? numericAmount : 0, sourceCurrency)
+  const quoteKey = `${sourceCurrency}|${targetCurrency}|${amount}`
+  const quote = quoteState?.key === quoteKey ? quoteState : null
+  const fee = crossCurrency && quote?.data ? Number(quote.data.fee) : 0
   const balanceAfter = selectedAccount
-    ? Number(selectedAccount.balance) - (validAmount ? numericAmount : 0)
+    ? Number(selectedAccount.balance) - (validAmount ? numericAmount : 0) - fee
     : 0
+
+  useEffect(() => {
+    if (!crossCurrency || !validAmount) return undefined
+    let cancelled = false
+    const timer = setTimeout(() => {
+      getQuote(sourceCurrency, targetCurrency, amount)
+        .then((data) => !cancelled && setQuoteState({ key: quoteKey, data }))
+        .catch((err) => !cancelled && setQuoteState({ key: quoteKey, error: err.message }))
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [crossCurrency, validAmount, sourceCurrency, targetCurrency, amount, quoteKey])
+
+  const recipientGets = !crossCurrency
+    ? formattedAmount
+    : quote?.data ? formatMoney(quote.data.convertedAmount, targetCurrency) : '\u2026'
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -29,8 +55,10 @@ export default function TransferForm({ accounts, onTransferred }) {
     setBusy(true)
     try {
       const transfer = await createTransfer(
-        idempotencyKey, Number(selectedFrom), toEmail.trim(), amount)
-      setSuccess(`Transfer #${transfer.id} completed`)
+        idempotencyKey, Number(selectedFrom), toEmail.trim(), amount, targetCurrency)
+      setSuccess(transfer.fromCurrency !== transfer.toCurrency
+        ? `Transfer #${transfer.id} completed: recipient received ${formatMoney(transfer.toAmount, transfer.toCurrency)} at ${transfer.exchangeRate} (fee ${formatMoney(transfer.fee, transfer.fromCurrency)})`
+        : `Transfer #${transfer.id} completed`)
       setAmount('')
       setToEmail('')
       setIdempotencyKey(crypto.randomUUID())
@@ -47,7 +75,7 @@ export default function TransferForm({ accounts, onTransferred }) {
       <div className="page-heading">
         <div>
           <h1>Send money</h1>
-          <p>Pick a wallet to send from; the recipient receives it in their wallet of the same currency.</p>
+          <p>Pick a wallet to send from, and the currency your recipient receives. Different currencies are converted at the current rate.</p>
         </div>
       </div>
       {accounts.length === 0 ? (
@@ -83,7 +111,17 @@ export default function TransferForm({ accounts, onTransferred }) {
               </button>
             </p>
             <label className="field">
-              Amount ({selectedAccount?.currency ?? 'USD'})
+              Recipient receives
+              <select value={targetCurrency} onChange={(event) => setToCurrencyChoice(event.target.value)}>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.currency}>
+                    {account.currency}{account.currency === sourceCurrency ? ' (same currency)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Amount ({sourceCurrency})
               <input
                 type="number"
                 min="0.0001"
@@ -105,8 +143,23 @@ export default function TransferForm({ accounts, onTransferred }) {
           <aside className="card summary-card">
             <h2 className="section-title">Summary</h2>
             <div className="summary-line"><span>Amount</span><strong>{formattedAmount}</strong></div>
-            <div className="summary-line"><span>Fee</span><strong>{formatMoney(0, selectedAccount?.currency ?? 'USD')}</strong></div>
-            <div className="summary-line total"><span>Recipient gets</span><strong>{formattedAmount}</strong></div>
+            {crossCurrency && (
+              <div className="summary-line">
+                <span>Exchange rate</span>
+                <strong>
+                  {quote?.data ? `1 ${sourceCurrency} = ${quote.data.rate} ${targetCurrency}` : '\u2026'}
+                </strong>
+              </div>
+            )}
+            <div className="summary-line">
+              <span>Fee{crossCurrency ? ' (0.5%)' : ''}</span>
+              <strong>{formatMoney(fee, sourceCurrency)}</strong>
+            </div>
+            <div className="summary-line total"><span>Recipient gets</span><strong>{recipientGets}</strong></div>
+            {quote?.error && <p className="error" role="alert">{quote.error}</p>}
+            {crossCurrency && (
+              <p className="summary-foot">Rate is cached for up to an hour; the amount you see is what the recipient receives.</p>
+            )}
             <p className="summary-foot">
               {selectedAccount
                 ? `Estimated balance after transfer: ${formatMoney(balanceAfter, selectedAccount.currency)}`

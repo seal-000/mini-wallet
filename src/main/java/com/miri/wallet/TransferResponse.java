@@ -9,7 +9,12 @@ public record TransferResponse(
         Long toAccountId,
         String fromAccountEnding,
         String toAccountEnding,
+        String fromCurrency,
+        String toCurrency,
         BigDecimal amount,
+        BigDecimal toAmount,
+        BigDecimal exchangeRate,
+        BigDecimal fee,
         LocalDateTime createdAt
 ) {
     public static TransferResponse from(Transfer transfer, Account from, Account to) {
@@ -19,7 +24,12 @@ public record TransferResponse(
                 transfer.getToAccountId(),
                 ending(from),
                 ending(to),
+                from == null ? null : from.getCurrency(),
+                to == null ? null : to.getCurrency(),
                 transfer.getAmount(),
+                transfer.getToAmount(),
+                transfer.getExchangeRate(),
+                transfer.getFee(),
                 transfer.getCreatedAt()
         );
     }

@@ -44,11 +44,20 @@ public class TransferController {
             throw new ForbiddenOperationException("You can only transfer from your own accounts");
         }
         var recipientEmail = request.toEmail().trim().toLowerCase();
-        var destination = userRepository.findByEmail(recipientEmail)
+        var targetCurrency = request.toCurrency() == null
+                ? source.getCurrency()
+                : request.toCurrency().toUpperCase();
+        if (!RegistrationService.SUPPORTED_CURRENCIES.contains(targetCurrency)) {
+            throw new IllegalArgumentException("Unsupported currency: " + targetCurrency);
+        }
+        var destination = (TransferService.FX_CLEARING_EMAIL.equals(recipientEmail)
+                || TransferService.FEE_REVENUE_EMAIL.equals(recipientEmail)
+                ? java.util.Optional.<Account>empty()
+                : userRepository.findByEmail(recipientEmail)
                 .flatMap(recipient -> accountRepository
-                        .findFirstByUserIdAndCurrencyOrderById(recipient.getId(), source.getCurrency()))
+                        .findFirstByUserIdAndCurrencyOrderById(recipient.getId(), targetCurrency)))
                 .orElseThrow(() -> new AccountNotFoundException(
-                        "Recipient not found or has no " + source.getCurrency() + " wallet"));
+                        "Recipient not found or has no " + targetCurrency + " wallet"));
         var transfer = transferService.transfer(
                 key,
                 request.fromAccountId(),

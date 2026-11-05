@@ -74,9 +74,12 @@ export async function downloadStatementCsv(filters) {
   URL.revokeObjectURL(url)
 }
 
-export const createTransfer = (idempotencyKey, fromAccountId, toEmail, amount) =>
+export const createTransfer = (idempotencyKey, fromAccountId, toEmail, amount, toCurrency) =>
   request('/api/transfers', {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
-    body: { fromAccountId, toEmail, amount },
+    body: { fromAccountId, toEmail, amount, toCurrency },
   })
+
+export const getQuote = (from, to, amount) =>
+  request(`/api/fx/quote?${new URLSearchParams({ from, to, amount })}`)

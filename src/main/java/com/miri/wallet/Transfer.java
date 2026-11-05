@@ -18,6 +18,9 @@ public class Transfer {
     private Long fromAccountId;
     private Long toAccountId;
     private BigDecimal amount;
+    private BigDecimal toAmount;
+    private BigDecimal exchangeRate;
+    private BigDecimal fee;
     private LocalDateTime createdAt;
 
     public Transfer() {
@@ -25,12 +28,34 @@ public class Transfer {
 
     public Transfer(Long id, String idempotencyKey, Long fromAccountId, Long toAccountId,
                     BigDecimal amount, LocalDateTime createdAt) {
+        this(id, idempotencyKey, fromAccountId, toAccountId, amount, amount, BigDecimal.ONE,
+                BigDecimal.ZERO, createdAt);
+    }
+
+    public Transfer(Long id, String idempotencyKey, Long fromAccountId, Long toAccountId,
+                    BigDecimal amount, BigDecimal toAmount, BigDecimal exchangeRate,
+                    BigDecimal fee, LocalDateTime createdAt) {
+        this.fee = fee;
         this.id = id;
         this.idempotencyKey = idempotencyKey;
         this.fromAccountId = fromAccountId;
         this.toAccountId = toAccountId;
         this.amount = amount;
+        this.toAmount = toAmount;
+        this.exchangeRate = exchangeRate;
         this.createdAt = createdAt;
+    }
+
+    public BigDecimal getToAmount() {
+        return toAmount;
+    }
+
+    public BigDecimal getFee() {
+        return fee;
+    }
+
+    public BigDecimal getExchangeRate() {
+        return exchangeRate;
     }
 
     public Long getId() {
